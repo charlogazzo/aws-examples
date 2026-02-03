@@ -1,0 +1,7 @@
+#! /usr/bin/bash
+
+echo "Deploying CloudFormation stack for S3 bucket..."
+aws cloudformation deploy \
+ --template-file template.yaml \
+ --stack-name my-cf-stack \
+ --region eu-central-1

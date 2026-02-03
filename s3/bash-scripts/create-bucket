@@ -1,0 +1,15 @@
+#! /usr/bin/bash
+
+if [ -z "$1" ]; then
+    echo "First argument is missing"
+    exit 1
+else
+    echo "First argument exists: $1"
+fi
+
+### LocationConstraint must be specified if the bucket is being created outside us-east-1
+aws s3api create-bucket \
+ --bucket $1 \
+ --create-bucket-configuration LocationConstraint=eu-central-1 \
+ --query BucketArn \
+ --output text

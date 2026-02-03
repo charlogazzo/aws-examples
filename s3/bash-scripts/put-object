@@ -1,0 +1,34 @@
+#! /usr/bin/bash
+
+#!/bin/bash
+
+set -e
+
+# Script to create 10 files with data
+
+# Create a directory for the files
+mkdir -p my_files
+cd my_files || exit 1 
+
+# Create 10 files
+for i in {1..10}; do
+    echo "Creating file$i.txt"
+    
+    # Write data to the file
+    cat > "file$i.txt" << EOF
+This is file number $i
+Created on: $(date)
+File content for demonstration purposes.
+Line 3 of file $i
+Line 4 of file $i
+EOF
+
+    # Alternative: Use echo statements
+    # echo "This is file number $i" > "file$i.txt"
+    # echo "Created on: $(date)" >> "file$i.txt"
+    # echo "Random number: $RANDOM" >> "file$i.txt"
+aws s3api put-object --bucket 11ck012588 --key "my_files/file$i.txt" --body "file$i.txt"
+done
+
+echo "Created 10 files in directory: $(pwd)"
+ls -la

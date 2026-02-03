@@ -1,0 +1,15 @@
+#! /usr/bin/bash
+
+if [ -z "$1" ]; then
+    echo "First argument is missing"
+    exit 1
+else
+    echo "First argument exists: $1"
+fi
+
+# first delete all objects in the bucket
+aws s3 rm s3://$1 --recursive
+
+
+aws s3api delete-bucket \
+ --bucket $1
