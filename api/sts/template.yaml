@@ -107,3 +107,4 @@ Outputs:
   InstanceProfileName:
     Description: Name of the instance profile
     Value: !Ref MyInstanceProfile
+  

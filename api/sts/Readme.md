@@ -46,3 +46,6 @@ aws sts get-caller-identity --profile assumed
 ## list buckets using the new assumed profile
 ```sh
 aws s3 ls --profile assumed
+```
+
+## delete user policy
