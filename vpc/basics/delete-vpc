@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+
+# detach the IGW from the vpc
+if [ -z "$1" ]; then
+  echo "Argument missing: IGW ID"
+else
+  export IGW_ID=$1
+fi
+
+
+# delete the subnet
+if [ -z "$2" ]; then
+  echo "Argument missing: Subnet ID"
+else
+  export SUBNET_ID=$2
+fi
+
+
+# delete the route table
+if [ -z "$3" ]; then
+  echo "Argument missing: Route Table ID"
+else
+  export ROUTE_TABLE_ID=$3
+fi
+
+# disassociate the subnet from the route table
+if [ -z "$4" ]; then
+  echo "Argument missing: Route Table Association ID"
+else
+  export ROUTE_TABLE_ASSOCIATION_ID=$4
+fi
+
+# delete the vpc
+if [ -z "$5" ]; then
+  echo "Argument missing: VPC ID"
+else
+  export VPC_ID=$5
+fi
+
+aws ec2 detach-internet-gateway \
+    --internet-gateway-id $IGW_ID \
+    --vpc-id $VPC_ID
+
+# delete the IGW
+aws ec2 delete-internet-gateway \
+    --internet-gateway-id $IGW_ID
+
+aws ec2 delete-subnet \
+    --subnet-id $SUBNET_ID
+
+aws ec2 delete-route-table \
+    --route-table-id $ROUTE_TABLE_ID
+
+aws ec2 disassociate-route-table \
+    --association-id $ROUTE_TABLE_ASSOCIATION_ID
+
+aws ec2 delete-vpc \
+    --vpc-id $VPC_ID
