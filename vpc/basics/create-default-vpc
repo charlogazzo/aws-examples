@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+
+# This script creates a default VPC in a specified region. The default VPC includes a default subnet, an internet gateway, and a route table.
+# create the VPC
+aws ec2 create_default-vpc --region us-east-1
