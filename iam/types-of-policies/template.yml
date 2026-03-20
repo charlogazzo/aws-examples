@@ -1,0 +1,43 @@
+Resources:
+  MyUser:
+    Type: AWS::IAM::User
+    Properties:
+      ManagedPolicyArns: 
+        - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
+      Policies: 
+        - PolicyName: MyUserPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: 
+                  - iam:ListRoles
+                  - iam:ListUsers
+                Resource: '*'
+      UserName: me-user-1
+  MyInlinePolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: MyInlinePolicy
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: 
+              - s3:ListBucket
+            Resource: '*'
+      Users:
+        - Ref: MyUser
+  MySecondInlinePolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: MySecondInlinePolicy 
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: 
+              - ec2:*
+            Resource: '*'
+      Users:
+        - Ref: MyUser

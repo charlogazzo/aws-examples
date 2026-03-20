@@ -1,0 +1,12 @@
+#! /usr/bin/bash
+
+## covnert policy.yaml to policy.json
+# yq -o json policy.yaml > policy.json
+
+
+# create policy version
+aws iam create-policy-version \
+    --policy-arn arn:aws:iam::492534223967:policy/my-cli-policy \
+    --policy-document "$(yq -o json policy.yaml)" \
+    --set-as-default
+
