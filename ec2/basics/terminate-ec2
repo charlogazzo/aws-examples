@@ -1,0 +1,13 @@
+#! /usr/bin/bash
+
+# Get the instance ID of the running EC2 instance
+INSTANCE_ID=$(aws ec2 describe-instances \
+    --query 'Reservations[*].Instances[*].[InstanceId]' \
+    --output text)
+
+echo "Instance ID to terminate: $INSTANCE_ID"
+
+# Terminate the EC2 instance
+aws ec2 terminate-instances --instance-ids $INSTANCE_ID
+
+echo "Terminating instance with ID: $INSTANCE_ID"
