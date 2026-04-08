@@ -1,0 +1,39 @@
+#! /usr/bin/bash
+
+# Create a key pair
+aws ec2 create-key-pair \
+  --key-name my-cli-key \
+  --query 'KeyMaterial' \
+  --output text > my-key.pem
+
+# Set permissions for the key pair
+chmod 400 my-key.pem
+
+# Create a security group
+aws ec2 create-security-group \
+  --group-name my-cli-sg-2 \
+  --description "My CLI Security Group"
+
+# Authorize inbound SSH traffic
+aws ec2 authorize-security-group-ingress \
+    --group-name my-cli-sg-2 \
+    --protocol tcp \
+    --port 22 \
+    --cidr 0.0.0.0/0
+
+AMI_ID=$(aws ec2 describe-images \
+  --owners amazon \
+  --filters "Name=name,Values=al2023-ami-*-kernel-6.1-*" \
+  --query 'Images | sort_by(@,&CreationDate)[-1].ImageId' \
+  --output text)
+
+echo "Using AMI ID: $AMI_ID"
+
+# Create an EC2 instance
+aws ec2 run-instances \
+  --image-id $AMI_ID \
+  --instance-type t3.small \
+  --key-name my-cli-key \
+  --security-groups my-cli-sg \
+  --count 1
+
