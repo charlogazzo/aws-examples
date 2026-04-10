@@ -1,0 +1,12 @@
+#! /usr/bin/bash
+
+echo "Deploying EFS"
+
+STACK_NAME="efs-basic"
+
+aws cloudformation deploy \
+  --template-file template.yaml \
+  --stack-name $STACK_NAME \
+  --no-execute-changeset \
+  --capabilities CAPABILITY_NAMED_IAM \
+  --region eu-central-1
