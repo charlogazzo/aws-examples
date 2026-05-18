@@ -1,0 +1,10 @@
+#!/usr/bin/bash
+
+echo "Deploying EC2 auto-scaling..."
+
+aws cloudformation deploy \
+    --template-file asg-template.yml \
+    --stack-name auto-scaling-stack \
+    --capabilities CAPABILITY_NAMED_IAM \
+    --no-execute-changeset \
+    --region eu-central-1

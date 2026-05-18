@@ -1,0 +1,1 @@
+AWS auto-scaling dows not automatically turn resources into scalable resources

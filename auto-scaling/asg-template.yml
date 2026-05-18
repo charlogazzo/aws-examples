@@ -1,0 +1,242 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  CloudFormation template for an Auto Scaling Group using EC2 instances
+  managed with AWS Systems Manager Session Manager (no SSH required).
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Default: vpc-06867ca50ebe9824c
+    Description: VPC ID
+
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Default: subnet-0b23e7f89a68d767d,subnet-022d915231a04bf7c
+    Description: List of subnets for ALB and ASG
+
+  InstanceType:
+    Type: String
+    Default: t3.micro
+    Description: EC2 instance type
+
+  AmiId:
+    Type: AWS::EC2::Image::Id
+    Default: ami-08bdb1495db49a7f9
+    Description: Amazon Linux 2 AMI ID
+
+  DesiredCapacity:
+    Type: Number
+    Default: 2
+
+  MinSize:
+    Type: Number
+    Default: 1
+
+  MaxSize:
+    Type: Number
+    Default: 4
+
+Resources:
+
+  #################################
+  # Security Groups
+  #################################
+
+  ALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow HTTP traffic to ALB
+      VpcId: !Ref VpcId
+
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+
+  EC2SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow HTTP access from ALB only
+      VpcId: !Ref VpcId
+
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: !Ref ALBSecurityGroup
+
+  #################################
+  # IAM Role for SSM
+  #################################
+
+  EC2InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: EC2SSMInstanceRole
+
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+
+      ManagedPolicyArns:
+        # AWS managed policy for Session Manager
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+
+      # Attach your existing SSM role permissions if required
+      Policies:
+        - PolicyName: AllowAssumeQuickSetupRole
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sts:AssumeRole
+                Resource: arn:aws:iam::492534223967:role/AmazonSSMRoleForInstancesQuickSetup
+
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref EC2InstanceRole
+
+  #################################
+  # Launch Template
+  #################################
+
+  EC2LaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: ec2-asg-launch-template
+
+      LaunchTemplateData:
+        ImageId: !Ref AmiId
+        InstanceType: !Ref InstanceType
+
+        IamInstanceProfile:
+          Arn: !GetAtt EC2InstanceProfile.Arn
+
+        SecurityGroupIds:
+          - !Ref EC2SecurityGroup
+
+        MetadataOptions:
+          HttpTokens: required
+          HttpEndpoint: enabled
+
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            yum update -y
+
+            # Install Apache
+            yum install -y httpd
+
+            systemctl enable httpd
+            systemctl start httpd
+
+            echo "<h1>Hello from Auto Scaling Group with SSM</h1>" > /var/www/html/index.html
+
+  #################################
+  # Target Group
+  #################################
+
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: ec2-target-group
+      Port: 80
+      Protocol: HTTP
+      VpcId: !Ref VpcId
+
+      HealthCheckPath: /
+      Matcher:
+        HttpCode: 200
+
+      TargetType: instance
+
+  #################################
+  # Application Load Balancer
+  #################################
+
+  ApplicationLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: ec2-alb
+      Scheme: internet-facing
+      Type: application
+
+      SecurityGroups:
+        - !Ref ALBSecurityGroup
+
+      Subnets: !Ref SubnetIds
+
+  Listener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref ApplicationLoadBalancer
+      Port: 80
+      Protocol: HTTP
+
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup
+
+  #################################
+  # Auto Scaling Group
+  #################################
+
+  AutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      VPCZoneIdentifier: !Ref SubnetIds
+
+      MinSize: !Ref MinSize
+      MaxSize: !Ref MaxSize
+      DesiredCapacity: !Ref DesiredCapacity
+
+      LaunchTemplate:
+        LaunchTemplateId: !Ref EC2LaunchTemplate
+        Version: !GetAtt EC2LaunchTemplate.LatestVersionNumber
+
+      TargetGroupARNs:
+        - !Ref TargetGroup
+
+      HealthCheckType: ELB
+      HealthCheckGracePeriod: 300
+
+      Tags:
+        - Key: Name
+          Value: ssm-managed-instance
+          PropagateAtLaunch: true
+
+  #################################
+  # Auto Scaling Policy
+  #################################
+
+  CPUScalingPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AutoScalingGroupName: !Ref AutoScalingGroup
+      PolicyType: TargetTrackingScaling
+
+      TargetTrackingConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ASGAverageCPUUtilization
+
+        TargetValue: 70
+
+Outputs:
+
+  LoadBalancerDNS:
+    Description: Application Load Balancer DNS Name
+    Value: !GetAtt ApplicationLoadBalancer.DNSName
+
+  AutoScalingGroupName:
+    Description: Auto Scaling Group Name
+    Value: !Ref AutoScalingGroup
