@@ -1,0 +1,56 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'CloudFormation template to create an EFS file system and mount targets'
+
+Parameters:
+  VpcId:
+    Type: String
+    Default: vpc-09d474119d2bb24a6
+    Description: VPC ID for the EFS instance
+  SubnetId:
+    Type: String
+    Default: subnet-009f445eb74c0b396
+    Description: Subnet ID for the EFS instance
+
+Resources:
+  # https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-efs-mounttarget.html
+  MountTarget: 
+    Type: AWS::EFS::MountTarget
+    Properties: 
+      FileSystemId: !Ref FileSystem      
+      SubnetId: !Ref SubnetId      
+      SecurityGroups: 
+        - !GetAtt SecurityGroup.GroupId
+
+  # https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-efs-filesystem.html
+  FileSystem:
+    Type: 'AWS::EFS::FileSystem'
+    Properties:
+      BackupPolicy:
+        Status: DISABLED
+      PerformanceMode: generalPurpose
+      Encrypted: true
+      # FileSystemPolicy:
+      #   Version: "2012-10-17"
+      #   Statement:
+      #     - Effect: "Allow"
+      #       Action:
+      #         - "elasticfilesystem:ClientMount"
+      #       Principal:
+      #           AWS: 'arn:aws:iam::111122223333:role/EfsReadOnly'
+  # https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-efs-accesspoint.html
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Mount target security group
+      GroupName: MountTargetSecurityGroup
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: 0.0.0.0/0
