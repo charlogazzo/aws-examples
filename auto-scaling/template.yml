@@ -1,0 +1,56 @@
+AWSTemplateFormatVersion: 2010-09-09
+Parameters:
+  ImageId:
+    Type: String
+    Default: ami-08bdb1495db49a7f9
+    Description: Amazon Linux 2 AMI ID for the EC2 instance
+  VpcId:
+    Type: String
+    Default: vpc-0b202f09d2198f533
+    Description: VPC ID for the EC2 instance
+  SubnetId:
+    Type: String
+    Default: subnet-01d3341f3a2224ef3
+    Description: Subnet ID for the EC2 instance
+Resources:
+  MyEC2Instance: 
+    Type: AWS::EC2::Instance
+    Properties: 
+      ImageId: !Ref ImageId
+      VpcId: !Ref VpcId
+      SubnetId: !Ref SubnetId
+      SecurityGroupIds: 
+        - !Ref SG
+      InstanceType: t3.small
+      BlockDeviceMappings: 
+      - DeviceName: "/dev/sdm"
+        Ebs: 
+          VolumeType: "io1"
+          Iops: "200"
+          DeleteOnTermination: "false"
+          VolumeSize: "20"
+      - DeviceName: "/dev/sdk"
+        NoDevice: {}
+      UserData: 
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          yum update -y
+          yum install -y httpd
+          systemctl start httpd
+          systemctl enable httpd
+          echo "Hello, World!" > /var/www/html/index.html
+  SG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow HTTP traffic to the EC2 instance
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: 0.0.0.0/0
