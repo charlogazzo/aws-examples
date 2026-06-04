@@ -1,0 +1,5 @@
+#! /usr/bin/bash
+
+aws sns publish \
+    --topic-arn "arn:aws:sns:eu-central-1:492534223967:MySNSTopic" \
+    --message file://message.json

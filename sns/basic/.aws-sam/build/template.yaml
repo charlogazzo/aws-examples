@@ -1,0 +1,24 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: A simple AWS SAM template for an SNS topic and a Lambda function subscribed
+  to it.
+Resources:
+  MySNSTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: MySNSTopic
+  MyLambdaFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: LambdaFunctionForSNS
+      Handler: index.handler
+      Runtime: python3.12
+      InlineCode: "def handler(event, context):\n    print(\"Received event: \" +\
+        \ str(event))\n    return {\n        'statusCode': 200,\n        'body': 'Hello\
+        \ from Lambda!'\n    }\n"
+      Events:
+        SNSTrigger:
+          Type: SNS
+          Properties:
+            Topic:
+              Ref: MySNSTopic
