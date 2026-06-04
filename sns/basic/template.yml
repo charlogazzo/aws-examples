@@ -1,0 +1,30 @@
+## what is important here is that the event source is defined as SNS and the topic is referenced correctly.
+## This allows the Lambda function to be triggered whenever a message is published to the SNS topic.
+
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: A simple AWS SAM template for an SNS topic and a Lambda function subscribed to it.
+Resources:
+  MySNSTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: MySNSTopic
+
+  MyLambdaFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: LambdaFunctionForSNS
+      Handler: index.handler
+      Runtime: python3.12
+      InlineCode: |
+        def handler(event, context):
+            print("Received event: " + str(event))
+            return {
+                'statusCode': 200,
+                'body': 'Hello from Lambda!'
+            }
+      Events:
+        SNSTrigger:
+          Type: SNS
+          Properties:
+            Topic: !Ref MySNSTopic

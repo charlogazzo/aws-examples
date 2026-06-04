@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+#
+# AWS SAM Deployment Script
+#
+# Prerequisites:
+# - AWS CLI installed and configured
+# - AWS SAM CLI installed
+# - Valid AWS credentials
+#
+
+# =========================
+# Configuration
+# =========================
+
+STACK_NAME="sns-lambda-sam-stack"
+REGION="eu-central-1"
+TEMPLATE_FILE="./template.yml"
+
+# Optional:
+# S3 bucket for SAM packaging
+# Leave empty to let SAM manage it automatically
+S3_BUCKET=""
+
+# =========================
+# Validate Requirements
+# =========================
+
+command -v aws >/dev/null 2>&1 || {
+  echo "ERROR: aws CLI is not installed"
+  exit 1
+}
+
+command -v sam >/dev/null 2>&1 || {
+  echo "ERROR: AWS SAM CLI is not installed"
+  exit 1
+}
+
+# =========================
+# Validate AWS Credentials
+# =========================
+
+echo "Checking AWS credentials..."
+
+aws sts get-caller-identity >/dev/null
+
+echo "AWS credentials are valid"
+
+# =========================
+# Validate SAM Template
+# =========================
+
+echo "Validating SAM template..."
+
+sam validate \
+  --template-file "${TEMPLATE_FILE}" \
+  --region "${REGION}"
+
+echo "Template validation successful"
+
+# =========================
+# Build SAM Application
+# =========================
+
+echo "Building SAM application..."
+
+sam build \
+  --template-file "${TEMPLATE_FILE}"
+
+echo "Build complete"
+
+# =========================
+# Deploy SAM Application
+# =========================
+
+echo "Deploying SAM application..."
+
+if [[ -n "${S3_BUCKET}" ]]; then
+  sam deploy \
+    --stack-name "${STACK_NAME}" \
+    --region "${REGION}" \
+    --s3-bucket "${S3_BUCKET}" \
+    --capabilities CAPABILITY_IAM \
+    --resolve-s3 \
+    --confirm-changeset \
+    --no-fail-on-empty-changeset
+else
+  sam deploy \
+    --stack-name "${STACK_NAME}" \
+    --region "${REGION}" \
+    --capabilities CAPABILITY_IAM \
+    --resolve-s3 \
+    --confirm-changeset \
+    --no-fail-on-empty-changeset
+fi
+
+echo "Deployment completed successfully"
+
+# =========================
+# Show Stack Outputs
+# =========================
+
+echo ""
+echo "CloudFormation Stack Outputs:"
+echo "================================"
+
+aws cloudformation describe-stacks \
+  --stack-name "${STACK_NAME}" \
+  --region "${REGION}" \
+  --query "Stacks[0].Outputs" \
+  --output table
+
+echo ""
+echo "Resources:"
+echo "================================"
+
+aws cloudformation list-stack-resources \
+  --stack-name "${STACK_NAME}" \
+  --region "${REGION}" \
+  --output table
