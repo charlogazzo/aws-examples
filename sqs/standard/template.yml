@@ -1,0 +1,7 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: A simple AWS SAM template for an SQS queue
+Resources:
+  # https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-sqs-queue.html
+  MySQSQueue:
+    Type: AWS::SQS::Queue

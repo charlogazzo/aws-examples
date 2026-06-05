@@ -1,0 +1,8 @@
+#! /usr/bin/bash
+
+echo "purging the SQS standard queue"
+
+QUEUE_URL="https://sqs.eu-central-1.amazonaws.com/492534223967/sqs-standard-queue-MySQSQueue-hBw72SBaAc36"
+
+aws sqs purge-queue \
+--queue-url "${QUEUE_URL}"

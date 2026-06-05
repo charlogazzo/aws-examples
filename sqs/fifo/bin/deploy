@@ -1,0 +1,17 @@
+#! /usr/bin/bash
+
+# Deploy the SAM application
+echo "Deploying the SQS FIFO queue"
+
+root_dir=$(realpath .)
+
+STACK_NAME="sqs-fifo-queue"
+TEMPLATE_FILE="${root_dir}/template.yml"
+
+aws cloudformation deploy \
+  --stack-name "${STACK_NAME}" \
+  --template-file "${TEMPLATE_FILE}" \
+  --region eu-central-1 \
+  --capabilities CAPABILITY_IAM \
+  --no-execute-changeset
+
