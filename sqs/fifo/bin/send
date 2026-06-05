@@ -1,0 +1,43 @@
+#! /usr/bin/bash
+
+echo "Sending a message to the SQS FIFO queue"
+
+QUEUE_URL="https://sqs.eu-central-1.amazonaws.com/492534223967/sqs-fifo-queue-MySQSQueue-PKFIMW5MveGQ.fifo"
+
+root_dir=$(realpath .)
+MESSAGE_ATTRIBUTES_FILE="${root_dir}/send-message.json"
+
+aws sqs send-message \
+--queue-url "${QUEUE_URL}" \
+--message-body "First message" \
+--message-group-id "hello-fifo" \
+--message-attributes file://${MESSAGE_ATTRIBUTES_FILE} \
+--message-deduplication-id "hello-fifo-1"
+
+aws sqs send-message \
+--queue-url "${QUEUE_URL}" \
+--message-body "Second message" \
+--message-group-id "hello-fifo" \
+--message-attributes file://${MESSAGE_ATTRIBUTES_FILE} \
+--message-deduplication-id "hello-fifo-2"
+
+aws sqs send-message \
+--queue-url "${QUEUE_URL}" \
+--message-body "Third message" \
+--message-group-id "hello-fifo" \
+--message-attributes file://${MESSAGE_ATTRIBUTES_FILE} \
+--message-deduplication-id "hello-fifo-3"
+
+aws sqs send-message \
+--queue-url "${QUEUE_URL}" \
+--message-body "Fourth message" \
+--message-group-id "hello-fifo" \
+--message-attributes file://${MESSAGE_ATTRIBUTES_FILE} \
+--message-deduplication-id "hello-fifo-4"
+
+aws sqs send-message \
+--queue-url "${QUEUE_URL}" \
+--message-body "Fifth message" \
+--message-group-id "hello-fifo" \
+--message-attributes file://${MESSAGE_ATTRIBUTES_FILE} \
+--message-deduplication-id "hello-fifo-5"

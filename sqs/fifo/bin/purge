@@ -1,0 +1,8 @@
+#! /usr/bin/bash
+
+echo "purging the SQS FIFO queue"
+
+QUEUE_URL="https://sqs.eu-central-1.amazonaws.com/492534223967/sqs-fifo-queue-MySQSQueue-PKFIMW5MveGQ.fifo"
+
+aws sqs purge-queue \
+--queue-url "${QUEUE_URL}"

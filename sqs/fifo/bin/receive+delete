@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# From ChatGPT
+
+set -euo pipefail
+
+echo "Receiving messages from the SQS FIFO queue..."
+
+QUEUE_URL="https://sqs.eu-central-1.amazonaws.com/492534223967/sqs-fifo-queue-MySQSQueue-PKFIMW5MveGQ.fifo"
+
+MESSAGE=$(aws sqs receive-message \
+  --queue-url "${QUEUE_URL}" \
+  --max-number-of-messages 1 \
+  --attribute-names All \
+  --message-attribute-names All \
+  --output json)
+
+if [[ "$(echo "${MESSAGE}" | jq '.Messages | length')" == "0" ]] || \
+   [[ "$(echo "${MESSAGE}" | jq '.Messages')" == "null" ]]; then
+  echo "No messages available."
+  exit 0
+fi
+
+BODY=$(echo "${MESSAGE}" | jq -r '.Messages[0].Body')
+RECEIPT_HANDLE=$(echo "${MESSAGE}" | jq -r '.Messages[0].ReceiptHandle')
+
+echo ""
+echo "Message Body:"
+echo "${BODY}"
+echo ""
+
+echo "Receipt Handle:"
+echo "${RECEIPT_HANDLE}"
+echo ""
+
+echo "Deleting message..."
+
+aws sqs delete-message \
+  --queue-url "${QUEUE_URL}" \
+  --receipt-handle "${RECEIPT_HANDLE}"
+
+echo "Message deleted successfully."
