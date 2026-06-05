@@ -1,0 +1,13 @@
+#! /usr/bin/bash
+
+echo "Receiving messages from the SQS standard queue"
+
+QUEUE_URL="https://sqs.eu-central-1.amazonaws.com/492534223967/sqs-standard-queue-MySQSQueue-hBw72SBaAc36"
+
+root_dir=$(realpath .)
+MESSAGE_ATTRIBUTES_FILE="${root_dir}/send-message.json"
+
+aws sqs receive-message \
+--queue-url "${QUEUE_URL}" \
+--attribute-names All \
+--message-attribute-names All

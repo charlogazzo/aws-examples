@@ -1,0 +1,14 @@
+#! /usr/bin/bash
+
+echo "Sending a message to the SQS standard queue"
+
+QUEUE_URL="https://sqs.eu-central-1.amazonaws.com/492534223967/sqs-standard-queue-MySQSQueue-hBw72SBaAc36"
+
+root_dir=$(realpath .)
+MESSAGE_ATTRIBUTES_FILE="${root_dir}/send-message.json"
+
+aws sqs send-message \
+--queue-url "${QUEUE_URL}" \
+--message-body "Information about the largest city in Any Region." \
+--delay-seconds 10 \
+--message-attributes file://${MESSAGE_ATTRIBUTES_FILE}
