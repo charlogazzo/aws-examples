@@ -1,0 +1,35 @@
+GEM
+  remote: https://rubygems.org/
+  specs:
+    amq-protocol (2.8.0)
+    bigdecimal (4.1.2)
+    bunny (3.1.0)
+      amq-protocol (~> 2.7)
+      logger (~> 1, >= 1.7)
+      sorted_set (~> 1, >= 1.0.2)
+    coderay (1.1.3)
+    io-console (0.8.2)
+    logger (1.7.0)
+    method_source (1.1.0)
+    ox (2.14.26)
+      bigdecimal (>= 3.0)
+    pry (0.16.0)
+      coderay (~> 1.1)
+      method_source (~> 1.0)
+      reline (>= 0.6.0)
+    rbtree (0.4.6)
+    reline (0.6.3)
+      io-console (~> 0.5)
+    sorted_set (1.1.0)
+      rbtree
+
+PLATFORMS
+  x86_64-linux-gnu
+
+DEPENDENCIES
+  bunny
+  ox
+  pry
+
+BUNDLED WITH
+   2.4.20
