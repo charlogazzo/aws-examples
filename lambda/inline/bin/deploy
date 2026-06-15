@@ -1,0 +1,6 @@
+#!/usr/bin/bash
+
+aws sam deploy \
+--template-file ../template.yaml \
+--stack-name inline \
+--capabilities CAPABILITY_IAM
