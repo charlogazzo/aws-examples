@@ -1,0 +1,11 @@
+#!/usr/bin/bash
+
+# build the docker image
+docker build -t lambda-container-example .
+
+# tag the docker image
+docker tag lambda-container-example:latest 123456789012.dkr.ecr.us-east-1.amazonaws.com/lambda-container-example:latest
+
+# push the docker image to ECR
+docker push 123456789012.dkr.ecr.us-east-1.amazonaws.com/lambda-container-example:latest
+

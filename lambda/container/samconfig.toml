@@ -1,0 +1,12 @@
+version = 0.1
+
+[default.deploy.parameters]
+stack_name = "sam-lambda"
+resolve_s3 = true
+s3_prefix = "sam-lambda"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM"
+image_repositories = ["MyLambdaFunction=492534223967.dkr.ecr.eu-central-1.amazonaws.com/samlambdaadfc63cd/mylambdafunctionf91cd224repo"]
+
+[default.global.parameters]
+region = "eu-central-1"

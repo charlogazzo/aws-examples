@@ -1,0 +1,73 @@
+#!/bin/bash
+
+# Exit on error
+set -e
+
+# Get the directory where this script is located
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+# Go up one level to the project root (where template.yml and function/ are)
+PROJECT_ROOT="$( cd "${SCRIPT_DIR}/.." && pwd )"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+echo -e "${YELLOW}Starting SAM deployment...${NC}"
+echo -e "${YELLOW}Project root: ${PROJECT_ROOT}${NC}"
+
+# Check if AWS CLI is configured
+if ! aws sts get-caller-identity &> /dev/null; then
+    echo -e "${RED}Error: AWS CLI not configured. Please run 'aws configure' first.${NC}"
+    exit 1
+fi
+
+# Check if SAM CLI is installed
+if ! command -v sam &> /dev/null; then
+    echo -e "${RED}Error: AWS SAM CLI is not installed.${NC}"
+    echo "Install it from: https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/install-sam-cli.html"
+    exit 1
+fi
+
+# Check if template.yml exists in project root
+if [ ! -f "${PROJECT_ROOT}/template.yml" ]; then
+    echo -e "${RED}Error: template.yml not found in ${PROJECT_ROOT}${NC}"
+    exit 1
+fi
+
+# Check if function.py exists
+if [ ! -f "${PROJECT_ROOT}/function/function.py" ]; then
+    echo -e "${RED}Error: function.py not found in ${PROJECT_ROOT}/function/${NC}"
+    exit 1
+fi
+
+# Change to project root directory
+cd "${PROJECT_ROOT}"
+
+# Copy and rename function.py to index.py in project root
+echo -e "${YELLOW}Preparing function code...${NC}"
+cp function/function.py index.py
+
+# Build the SAM application
+echo -e "${YELLOW}Building SAM application...${NC}"
+sam build
+
+# Deploy the SAM application
+echo -e "${YELLOW}Deploying SAM application...${NC}"
+
+STACK_NAME="sam-app"  # Change this to your desired stack name
+
+# Check if this is the first deployment
+if ! aws cloudformation describe-stacks --stack-name ${STACK_NAME} &> /dev/null; then
+    echo -e "${YELLOW}First time deployment. Using guided deploy...${NC}"
+    sam deploy --guided
+else
+    echo -e "${YELLOW}Updating existing stack...${NC}"
+    sam deploy
+fi
+
+# Clean up temporary index.py
+rm -f index.py
+
+echo -e "${GREEN}Deployment complete!${NC}"

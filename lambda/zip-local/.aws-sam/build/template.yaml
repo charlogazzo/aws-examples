@@ -1,0 +1,11 @@
+Transform: AWS::Serverless-2016-10-31
+Resources:
+  MyLambdaFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.handler
+      Runtime: python3.12
+      PackageType: Zip
+      CodeUri: MyLambdaFunction
+    Metadata:
+      SamResourceId: MyLambdaFunction

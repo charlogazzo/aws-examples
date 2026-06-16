@@ -1,0 +1,17 @@
+Transform: AWS::Serverless-2016-10-31
+Resources:
+  MyLambdaFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: docker
+      DockerContext: /home/charles/VSCode/aws-examples/lambda/container
+      Dockerfile: Dockerfile
+      SamResourceId: MyLambdaFunction
+    Properties:
+      PackageType: Image
+      ImageUri: mylambdafunction:latest
+      ImageConfig:
+        Command:
+        - index.handler
+      MemorySize: 128
+      Timeout: 30
