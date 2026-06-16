@@ -1,0 +1,8 @@
+#!/usr/bin/bash
+
+# create the ecr repository for the docker image
+aws ecr create-repository \
+--repository-name lambda-container-example  \
+--region eu-central-1 \
+--image-scanning-configuration scanOnPush=true \
+--image-tag-mutability MUTABLE
