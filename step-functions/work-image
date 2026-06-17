@@ -1,0 +1,6 @@
+#!/usr/bin/bash
+
+# This triggers the Step Function by uploading an image to S3.
+
+aws s3 rm s3://nwofor-936-step-functions/inputs/Nico_Rosberg_and_Lewis_Hamilton_2016_Malaysia.jpeg
+aws s3 cp Nico_Rosberg_and_Lewis_Hamilton_2016_Malaysia.jpeg s3://nwofor-936-step-functions/inputs/Nico_Rosberg_and_Lewis_Hamilton_2016_Malaysia.jpeg
