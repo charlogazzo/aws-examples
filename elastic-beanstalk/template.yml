@@ -1,0 +1,10 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: "AWS Elastic Beanstalk Environment running Python Sample Application"
+Type: AWS::ElasticBeanstalk::Environment
+Properties: 
+  ApplicationName: 
+    Ref: sampleApplication
+    Description: "AWS Elastic Beanstalk Environment running Python Sample Application"
+  EnvironmentName: SamplePythonEnvironment
+  TemplateName: DefaultConfiguration
+  VersionLabel: "Initial Version"
