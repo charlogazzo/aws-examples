@@ -44,3 +44,13 @@ terraform.rc
 # planout
 
 node_modules/
+# python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pyc
+*.pyo
+*.pyd
+*.pyc
+.venv/
