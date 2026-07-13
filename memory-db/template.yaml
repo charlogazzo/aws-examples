@@ -1,0 +1,161 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "EC2 Instance Deployment Template"
+
+Parameters:
+  InstanceType:
+    Type: String
+    Default: t3.small
+    Description: EC2 instance type
+    AllowedValues:
+      - t3.small
+      - t3.medium
+      - t3.large
+    
+  AmiId:
+    Type: AWS::EC2::Image::Id
+    Default: ami-0303e2e4a29f041a3
+    Description: AMI ID for the EC2 instance
+    
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Default: vpc-0455ce47c21c1e89b
+    Description: VPC ID where the instance will be deployed
+    
+  SubnetId:
+    Type: AWS::EC2::Subnet::Id
+    Default: subnet-06f450140eb1baf89
+    Description: Subnet ID where the instance will be deployed
+    
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Name of an existing EC2 KeyPair to enable SSH access
+    Default: ""
+    
+  InstanceName:
+    Type: String
+    Default: "MyEC2Instance"
+    Description: Name tag for the EC2 instance
+
+Resources:
+  # Security Group for the EC2 instance
+  InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Security group for EC2 instance"
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub "${InstanceName}-SG"
+
+  # IAM Role for EC2 (optional - for basic permissions)
+  EC2InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Tags:
+        - Key: Name
+          Value: !Sub "${InstanceName}-Role"
+
+  # Instance Profile
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref EC2InstanceRole
+
+  # EC2 Instance
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref AmiId
+      InstanceType: !Ref InstanceType
+      SubnetId: !Ref SubnetId
+      SecurityGroupIds:
+        - !Ref InstanceSecurityGroup
+      KeyName: !Ref KeyName
+      IamInstanceProfile: !Ref EC2InstanceProfile
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          # Update and install basic packages
+          yum update -y
+          yum install -y git python3-pip
+          
+          # Install CloudWatch Agent for monitoring
+          sudo yum install -y amazon-cloudwatch-agent
+          
+          # Install SSM Agent (usually pre-installed)
+          sudo yum install -y amazon-ssm-agent
+          sudo systemctl enable amazon-ssm-agent
+          sudo systemctl start amazon-ssm-agent
+          
+          # Create a sample web page
+          echo "<html><body><h1>Welcome to EC2 Instance: ${InstanceName}</h1><p>Deployed via CloudFormation</p></body></html>" > /var/www/html/index.html
+          
+          # Start web server if installed
+          if systemctl list-unit-files | grep -q httpd; then
+            sudo systemctl start httpd
+            sudo systemctl enable httpd
+          fi
+          
+          echo "User data script completed successfully"
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 20
+            VolumeType: gp3
+            DeleteOnTermination: true
+      Tags:
+        - Key: Name
+          Value: !Ref InstanceName
+        - Key: Environment
+          Value: "Development"
+        - Key: ProvisionedBy
+          Value: "CloudFormation"
+        - Key: Region
+          Value: "eu-central-1"
+
+Outputs:
+  InstanceId:
+    Description: "EC2 Instance ID"
+    Value: !Ref EC2Instance
+    
+  PublicIp:
+    Description: "Public IP address of the EC2 instance"
+    Value: !GetAtt EC2Instance.PublicIp
+    
+  PrivateIp:
+    Description: "Private IP address of the EC2 instance"
+    Value: !GetAtt EC2Instance.PrivateIp
+    
+  SecurityGroupId:
+    Description: "Security Group ID"
+    Value: !Ref InstanceSecurityGroup
+    
+  InstanceRole:
+    Description: "IAM Role ARN"
+    Value: !GetAtt EC2InstanceRole.Arn
