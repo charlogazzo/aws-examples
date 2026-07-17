@@ -1,0 +1,238 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: EC2 Ubuntu with PostgreSQL configured for remote access
+
+Parameters:
+
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Existing EC2 Key Pair
+    Default: Ubuntu Lenovo
+
+  MyIP:
+    Type: String
+    Description: Your public IP in CIDR format
+    Default: 93.238.106.253/32
+
+  InstanceType:
+    Type: String
+    Default: t3.micro
+
+Mappings:
+
+  UbuntuAMI:
+    eu-central-1:
+      AMI: ami-0303e2e4a29f041a3
+    us-east-1:
+      AMI: ami-0b6d9d3d33ba97d99 
+
+Resources:
+
+####################################
+# Networking
+####################################
+
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+
+      Tags:
+        - Key: Name
+          Value: postgres-demo-vpc
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref VPC
+
+  PublicSubnet:
+
+    Type: AWS::EC2::Subnet
+
+    Properties:
+      AvailabilityZone: !Select [0, !GetAZs '']
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.1.0/24
+      MapPublicIpOnLaunch: true
+
+      Tags:
+        - Key: Name
+          Value: postgres-public-subnet
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+
+    Properties:
+      VpcId: !Ref VPC
+
+  DefaultRoute:
+
+    Type: AWS::EC2::Route
+
+    DependsOn: AttachGateway
+
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+      RouteTableId: !Ref PublicRouteTable
+
+  RouteAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet
+
+####################################
+# Security Group
+####################################
+
+  EC2SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+
+    Properties:
+
+      GroupDescription: PostgreSQL Demo
+
+      VpcId: !Ref VPC
+
+      SecurityGroupIngress:
+
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref MyIP
+
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          CidrIp: !Ref MyIP
+
+####################################
+# IAM
+####################################
+
+  InstanceRole:
+    Type: AWS::IAM::Role
+
+    Properties:
+
+      AssumeRolePolicyDocument:
+
+        Version: "2012-10-17"
+
+        Statement:
+
+          - Effect: Allow
+
+            Principal:
+              Service: ec2.amazonaws.com
+
+            Action: sts:AssumeRole
+
+      ManagedPolicyArns:
+
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+
+    Properties:
+
+      Roles:
+        - !Ref InstanceRole
+
+####################################
+# EC2
+####################################
+
+  EC2Instance:
+    Type: AWS::EC2::Instance
+
+    Properties:
+
+      InstanceType: !Ref InstanceType
+
+      ImageId: !FindInMap
+        - UbuntuAMI
+        - !Ref AWS::Region
+        - AMI
+
+      KeyName: !Ref KeyName
+
+      IamInstanceProfile: !Ref InstanceProfile
+
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          DeviceIndex: 0
+          GroupSet:
+            - !Ref EC2SecurityGroup
+          SubnetId: !Ref PublicSubnet
+
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+
+          export DEBIAN_FRONTEND=noninteractive
+
+          apt-get update
+
+          apt-get install -y postgresql postgresql-contrib
+
+          systemctl enable postgresql
+          systemctl start postgresql
+
+          PG_VERSION=$(ls /etc/postgresql)
+
+          sed -i "s/#listen_addresses = 'localhost'/listen_addresses='*'/" /etc/postgresql/$PG_VERSION/main/postgresql.conf
+
+          echo "host all all 0.0.0.0/0 md5" >> /etc/postgresql/$PG_VERSION/main/pg_hba.conf
+
+          sudo -u postgres psql <<EOF
+          CREATE USER demo WITH PASSWORD 'Password123!';
+          CREATE DATABASE demo OWNER demo;
+          EOF
+
+          systemctl restart postgresql
+
+      Tags:
+        - Key: Name
+          Value: postgres-demo
+
+####################################
+# Elastic IP
+####################################
+
+  ElasticIP:
+    Type: AWS::EC2::EIP
+
+    Properties:
+      Domain: vpc
+
+  EIPAssociation:
+    Type: AWS::EC2::EIPAssociation
+
+    Properties:
+      AllocationId: !GetAtt ElasticIP.AllocationId
+      InstanceId: !Ref EC2Instance
+
+Outputs:
+
+  PublicIP:
+    Value: !Ref ElasticIP
+
+  SSH:
+
+    Value: !Sub |
+      ssh -i YOUR_KEY.pem ubuntu@${ElasticIP}
+
+  PostgreSQL:
+
+    Value: !Sub |
+      psql -h ${ElasticIP} -U demo -d demo
