@@ -1,0 +1,21 @@
+#!/usr/bin/bash
+
+ALB_DNS=$(aws cloudformation describe-stacks \
+    --stack-name load-balancer-demo \
+    --query "Stacks[0].Outputs[?OutputKey=='LoadBalancerDNS'].OutputValue" \
+    --output text)
+
+echo "Testing: http://$ALB_DNS"
+echo
+echo "Press CTRL+C to stop."
+echo
+
+while true
+do
+    echo "----------------------------------------"
+
+    curl -s "http://$ALB_DNS" \
+        | grep -E "Instance ID|Private IP|Availability Zone|Hostname"
+
+    sleep 1
+done
