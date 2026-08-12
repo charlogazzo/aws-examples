@@ -1,0 +1,31 @@
+#!/usr/bin/bash
+
+#!/bin/bash
+
+set -e
+
+STACK_NAME="load-balancer-demo"
+
+echo "Deploying CloudFormation stack..."
+
+aws cloudformation deploy \
+    --stack-name "$STACK_NAME" \
+    --template-file template.yaml \
+    --capabilities CAPABILITY_IAM
+
+echo
+echo "Stack deployed successfully."
+echo
+
+ALB_DNS=$(aws cloudformation describe-stacks \
+    --stack-name "$STACK_NAME" \
+    --query "Stacks[0].Outputs[?OutputKey=='LoadBalancerDNS'].OutputValue" \
+    --output text)
+
+echo "=========================================="
+echo "Load Balancer DNS:"
+echo "$ALB_DNS"
+echo
+echo "URL:"
+echo "http://$ALB_DNS"
+echo "=========================================="
