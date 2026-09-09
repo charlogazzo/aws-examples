@@ -1,3 +1,5 @@
+############ GENERATED FROM AI CODING ###############
+
 ## create an app (python-flask)
 
 ## dockerize the app
