@@ -1,0 +1,451 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Description: >
+  ECS Fargate demo running a container from Amazon ECR behind an
+  Application Load Balancer.
+
+Parameters:
+
+  ECRRepositoryName:
+    Type: String
+    Default: ecs-demo
+    Description: Name of the ECR repository containing the application image.
+
+  ImageTag:
+    Type: String
+    Default: latest
+    Description: Docker image tag to deploy.
+
+  DesiredCount:
+    Type: Number
+    Default: 2
+    Description: Number of Fargate tasks to run.
+
+  VpcCIDR:
+    Type: String
+    Default: 10.0.0.0/16
+
+  PublicSubnet1CIDR:
+    Type: String
+    Default: 10.0.1.0/24
+
+  PublicSubnet2CIDR:
+    Type: String
+    Default: 10.0.2.0/24
+
+
+Resources:
+
+  # ============================================================
+  # VPC
+  # ============================================================
+
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCIDR
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: ecs-fargate-vpc
+
+
+  # ============================================================
+  # Internet Gateway
+  # ============================================================
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: ecs-fargate-igw
+
+
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref VPC
+
+
+  # ============================================================
+  # Public Subnets
+  # ============================================================
+
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PublicSubnet1CIDR
+      AvailabilityZone:
+        Fn::Select:
+          - 0
+          - Fn::GetAZs: !Ref AWS::Region
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: ecs-fargate-public-subnet-1
+
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PublicSubnet2CIDR
+      AvailabilityZone:
+        Fn::Select:
+          - 1
+          - Fn::GetAZs: !Ref AWS::Region
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: ecs-fargate-public-subnet-2
+
+
+  # ============================================================
+  # Route Table
+  # ============================================================
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: ecs-fargate-public-route-table
+
+
+  DefaultPublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn:
+      - InternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+
+  PublicSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet1
+
+
+  PublicSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet2
+
+
+  # ============================================================
+  # ALB Security Group
+  # ============================================================
+
+  ALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow HTTP traffic to the Application Load Balancer
+      VpcId: !Ref VPC
+
+      SecurityGroupIngress:
+
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+
+      SecurityGroupEgress:
+
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+
+      Tags:
+        - Key: Name
+          Value: ecs-fargate-alb-sg
+
+
+  # ============================================================
+  # ECS Task Security Group
+  # ============================================================
+
+  ECSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow traffic from the ALB to ECS tasks
+      VpcId: !Ref VPC
+
+      SecurityGroupIngress:
+
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          SourceSecurityGroupId: !Ref ALBSecurityGroup
+
+      SecurityGroupEgress:
+
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+
+      Tags:
+        - Key: Name
+          Value: ecs-fargate-task-sg
+
+
+  # ============================================================
+  # Application Load Balancer
+  # ============================================================
+
+  ApplicationLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: ecs-fargate-alb
+      Scheme: internet-facing
+      Type: application
+
+      Subnets:
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+
+      SecurityGroups:
+        - !Ref ALBSecurityGroup
+
+      Tags:
+        - Key: Name
+          Value: ecs-fargate-alb
+
+
+  # ============================================================
+  # Target Group
+  # ============================================================
+
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: ecs-fargate-targets
+      VpcId: !Ref VPC
+
+      Port: 8080
+      Protocol: HTTP
+
+      TargetType: ip
+
+      HealthCheckEnabled: true
+      HealthCheckPath: /health
+      HealthCheckProtocol: HTTP
+      HealthCheckPort: traffic-port
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
+      HealthCheckTimeoutSeconds: 5
+      HealthCheckIntervalSeconds: 30
+
+      Matcher:
+        HttpCode: 200
+
+
+  # ============================================================
+  # ALB Listener
+  # ============================================================
+
+  ALBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref ApplicationLoadBalancer
+      Port: 80
+      Protocol: HTTP
+
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup
+
+
+  # ============================================================
+  # ECS Cluster
+  # ============================================================
+
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: ecs-fargate-demo
+
+      Tags:
+        - Key: Name
+          Value: ecs-fargate-demo
+
+
+  # ============================================================
+  # ECS Task Execution Role
+  # ============================================================
+
+  ECSTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: ecs-fargate-task-execution-role
+
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+
+        Statement:
+          - Effect: Allow
+
+            Principal:
+              Service:
+                - ecs-tasks.amazonaws.com
+
+            Action:
+              - sts:AssumeRole
+
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+
+
+  # ============================================================
+  # Fargate Task Definition
+  # ============================================================
+
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+
+    Properties:
+      Family: ecs-fargate-demo
+
+      NetworkMode: awsvpc
+
+      RequiresCompatibilities:
+        - FARGATE
+
+      Cpu: '256'
+      Memory: '512'
+
+      ExecutionRoleArn:
+        Fn::GetAtt:
+          - ECSTaskExecutionRole
+          - Arn
+
+      ContainerDefinitions:
+
+        - Name: ecs-demo
+
+          Image:
+            !Sub
+              - '${RepositoryUri}:${ImageTag}'
+              - RepositoryUri:
+                  Fn::Sub:
+                    - '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ECRRepositoryName}'
+                    - ECRRepositoryName: !Ref ECRRepositoryName
+
+          Essential: true
+
+          PortMappings:
+
+            - ContainerPort: 8080
+              Protocol: tcp
+
+          Environment:
+
+            - Name: ENVIRONMENT
+              Value: fargate
+
+          LogConfiguration:
+
+            LogDriver: awslogs
+
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+
+
+  # ============================================================
+  # CloudWatch Log Group
+  # ============================================================
+
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /ecs/ecs-fargate-demo
+      RetentionInDays: 7
+
+
+  # ============================================================
+  # ECS Service
+  # ============================================================
+
+  ECSService:
+    Type: AWS::ECS::Service
+
+    DependsOn:
+      - ALBListener
+
+    Properties:
+
+      ServiceName: ecs-fargate-demo
+
+      Cluster:
+        Ref: ECSCluster
+
+      TaskDefinition:
+        Ref: TaskDefinition
+
+      DesiredCount:
+        Ref: DesiredCount
+
+      LaunchType: FARGATE
+
+      PlatformVersion: LATEST
+
+      DeploymentConfiguration:
+
+        MaximumPercent: 200
+        MinimumHealthyPercent: 50
+
+      NetworkConfiguration:
+
+        AwsvpcConfiguration:
+
+          AssignPublicIp: ENABLED
+
+          Subnets:
+            - !Ref PublicSubnet1
+            - !Ref PublicSubnet2
+
+          SecurityGroups:
+            - !Ref ECSSecurityGroup
+
+      LoadBalancers:
+
+        - ContainerName: ecs-demo
+          ContainerPort: 8080
+          TargetGroupArn: !Ref TargetGroup
+
+
+# ==============================================================
+# Outputs
+# ==============================================================
+
+Outputs:
+
+  ClusterName:
+    Description: ECS cluster name
+    Value: !Ref ECSCluster
+
+
+  ServiceName:
+    Description: ECS service name
+    Value: !GetAtt ECSService.Name
+
+
+  LoadBalancerDNS:
+    Description: Application Load Balancer DNS name
+    Value: !GetAtt ApplicationLoadBalancer.DNSName
+
+
+  ApplicationURL:
+    Description: URL of the application
+    Value:
+      !Sub
+        - 'http://${DNSName}'
+        - DNSName: !GetAtt ApplicationLoadBalancer.DNSName

@@ -1,0 +1,712 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Description: >
+  ECS EC2 demo running a container from Amazon ECR behind an
+  Application Load Balancer.
+
+Parameters:
+
+  ECRRepositoryName:
+    Type: String
+    Default: ecs-demo
+
+  ImageTag:
+    Type: String
+    Default: latest
+
+  DesiredCount:
+    Type: Number
+    Default: 2
+
+  MinSize:
+    Type: Number
+    Default: 1
+
+  MaxSize:
+    Type: Number
+    Default: 2
+
+  InstanceType:
+    Type: String
+    Default: t3.micro
+
+  VpcCIDR:
+    Type: String
+    Default: 10.1.0.0/16
+
+  PublicSubnet1CIDR:
+    Type: String
+    Default: 10.1.1.0/24
+
+  PublicSubnet2CIDR:
+    Type: String
+    Default: 10.1.2.0/24
+
+  # ============================================================
+  # ECS-Optimized AMI
+  # ============================================================
+
+  ECSAMI:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+
+    Default: /aws/service/ecs/optimized-ami/amazon-linux-2023/recommended/image_id
+
+
+Resources:
+
+  # ============================================================
+  # VPC
+  # ============================================================
+
+  VPC:
+    Type: AWS::EC2::VPC
+
+    Properties:
+      CidrBlock: !Ref VpcCIDR
+
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+
+      Tags:
+        - Key: Name
+          Value: ecs-ec2-vpc
+
+
+  # ============================================================
+  # Internet Gateway
+  # ============================================================
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+
+    Properties:
+      Tags:
+        - Key: Name
+          Value: ecs-ec2-igw
+
+
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+
+    Properties:
+      InternetGatewayId:
+        Ref: InternetGateway
+
+      VpcId:
+        Ref: VPC
+
+
+  # ============================================================
+  # Public Subnet 1
+  # ============================================================
+
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+
+    Properties:
+      VpcId:
+        Ref: VPC
+
+      CidrBlock:
+        Ref: PublicSubnet1CIDR
+
+      AvailabilityZone:
+        Fn::Select:
+          - 0
+          - Fn::GetAZs: !Ref AWS::Region
+
+      MapPublicIpOnLaunch: true
+
+      Tags:
+        - Key: Name
+          Value: ecs-ec2-public-subnet-1
+
+
+  # ============================================================
+  # Public Subnet 2
+  # ============================================================
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+
+    Properties:
+      VpcId:
+        Ref: VPC
+
+      CidrBlock:
+        Ref: PublicSubnet2CIDR
+
+      AvailabilityZone:
+        Fn::Select:
+          - 1
+          - Fn::GetAZs: !Ref AWS::Region
+
+      MapPublicIpOnLaunch: true
+
+      Tags:
+        - Key: Name
+          Value: ecs-ec2-public-subnet-2
+
+
+  # ============================================================
+  # Route Table
+  # ============================================================
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+
+    Properties:
+      VpcId:
+        Ref: VPC
+
+      Tags:
+        - Key: Name
+          Value: ecs-ec2-public-route-table
+
+
+  DefaultPublicRoute:
+    Type: AWS::EC2::Route
+
+    DependsOn:
+      - InternetGatewayAttachment
+
+    Properties:
+      RouteTableId:
+        Ref: PublicRouteTable
+
+      DestinationCidrBlock: 0.0.0.0/0
+
+      GatewayId:
+        Ref: InternetGateway
+
+
+  PublicSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+
+    Properties:
+      RouteTableId:
+        Ref: PublicRouteTable
+
+      SubnetId:
+        Ref: PublicSubnet1
+
+
+  PublicSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+
+    Properties:
+      RouteTableId:
+        Ref: PublicRouteTable
+
+      SubnetId:
+        Ref: PublicSubnet2
+
+
+  # ============================================================
+  # ALB Security Group
+  # ============================================================
+
+  ALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+
+    Properties:
+      GroupDescription: Allow HTTP traffic to ALB
+
+      VpcId:
+        Ref: VPC
+
+      SecurityGroupIngress:
+
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+
+      SecurityGroupEgress:
+
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+
+      Tags:
+        - Key: Name
+          Value: ecs-ec2-alb-sg
+
+
+  # ============================================================
+  # ECS Security Group
+  # ============================================================
+
+  ECSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+
+    Properties:
+      GroupDescription: Allow traffic from ALB to ECS EC2 instances
+
+      VpcId:
+        Ref: VPC
+
+      SecurityGroupIngress:
+
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          SourceSecurityGroupId:
+            Ref: ALBSecurityGroup
+
+      SecurityGroupEgress:
+
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+
+      Tags:
+        - Key: Name
+          Value: ecs-ec2-task-sg
+
+
+  # ============================================================
+  # ECS Cluster
+  # ============================================================
+
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+
+    Properties:
+      ClusterName: ecs-ec2-demo
+
+      Tags:
+        - Key: Name
+          Value: ecs-ec2-demo
+
+
+  # ============================================================
+  # IAM Role for ECS EC2 Instances
+  # ============================================================
+
+  ECSInstanceRole:
+    Type: AWS::IAM::Role
+
+    Properties:
+
+      RoleName: ecs-ec2-instance-role
+
+      AssumeRolePolicyDocument:
+
+        Version: '2012-10-17'
+
+        Statement:
+
+          - Effect: Allow
+
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+
+            Action:
+              - sts:AssumeRole
+
+      ManagedPolicyArns:
+
+        - arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role
+
+
+  # ============================================================
+  # Instance Profile
+  # ============================================================
+
+  ECSInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+
+    Properties:
+
+      InstanceProfileName: ecs-ec2-instance-profile
+
+      Roles:
+        - !Ref ECSInstanceRole
+
+
+  # ============================================================
+  # IAM Role for ECS Tasks
+  # ============================================================
+
+  ECSTaskExecutionRole:
+    Type: AWS::IAM::Role
+
+    Properties:
+
+      RoleName: ecs-ec2-task-execution-role
+
+      AssumeRolePolicyDocument:
+
+        Version: '2012-10-17'
+
+        Statement:
+
+          - Effect: Allow
+
+            Principal:
+              Service:
+                - ecs-tasks.amazonaws.com
+
+            Action:
+              - sts:AssumeRole
+
+      ManagedPolicyArns:
+
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+
+
+  # ============================================================
+  # Launch Template
+  # ============================================================
+
+  LaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+
+    Properties:
+
+      LaunchTemplateName: ecs-ec2-launch-template
+
+      LaunchTemplateData:
+
+        ImageId:
+          Ref: ECSAMI
+
+        InstanceType:
+          Ref: InstanceType
+
+        IamInstanceProfile:
+          Name:
+            Ref: ECSInstanceProfile
+
+        SecurityGroupIds:
+          - Ref: ECSSecurityGroup
+
+        UserData:
+          Fn::Base64:
+            Fn::Sub: |
+              #!/bin/bash
+
+              echo ECS_CLUSTER=${ECSCluster} >> /etc/ecs/ecs.config
+
+              echo ECS_ENABLE_CONTAINER_METADATA=true >> /etc/ecs/ecs.config
+
+
+        TagSpecifications:
+
+          - ResourceType: instance
+
+            Tags:
+              - Key: Name
+                Value: ecs-ec2-instance
+
+
+  # ============================================================
+  # Auto Scaling Group
+  # ============================================================
+
+  AutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+
+    Properties:
+
+      MinSize:
+        Ref: MinSize
+
+      MaxSize:
+        Ref: MaxSize
+
+      DesiredCapacity:
+        Ref: MinSize
+
+      VPCZoneIdentifier:
+
+        - Ref: PublicSubnet1
+        - Ref: PublicSubnet2
+
+      LaunchTemplate:
+
+        LaunchTemplateId:
+          Ref: LaunchTemplate
+
+        Version:
+          Fn::GetAtt:
+            - LaunchTemplate
+            - LatestVersionNumber
+
+      Tags:
+
+        - Key: Name
+          Value: ecs-ec2-instance
+          PropagateAtLaunch: true
+
+
+  # ============================================================
+  # Application Load Balancer
+  # ============================================================
+
+  ApplicationLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+
+    Properties:
+
+      Name: ecs-ec2-alb
+
+      Scheme: internet-facing
+
+      Type: application
+
+      Subnets:
+
+        - Ref: PublicSubnet1
+        - Ref: PublicSubnet2
+
+      SecurityGroups:
+
+        - Ref: ALBSecurityGroup
+
+      Tags:
+
+        - Key: Name
+          Value: ecs-ec2-alb
+
+
+  # ============================================================
+  # Target Group
+  # ============================================================
+
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+
+    Properties:
+
+      Name: ecs-ec2-targets
+
+      VpcId:
+        Ref: VPC
+
+      Port: 8080
+
+      Protocol: HTTP
+
+      TargetType: instance
+
+      HealthCheckEnabled: true
+
+      HealthCheckPath: /health
+
+      HealthCheckProtocol: HTTP
+
+      HealthCheckPort: traffic-port
+
+      HealthyThresholdCount: 2
+
+      UnhealthyThresholdCount: 3
+
+      HealthCheckTimeoutSeconds: 5
+
+      HealthCheckIntervalSeconds: 30
+
+      Matcher:
+        HttpCode: 200
+
+
+  # ============================================================
+  # ALB Listener
+  # ============================================================
+
+  ALBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+
+    Properties:
+
+      LoadBalancerArn:
+        Ref: ApplicationLoadBalancer
+
+      Port: 80
+
+      Protocol: HTTP
+
+      DefaultActions:
+
+        - Type: forward
+          TargetGroupArn:
+            Ref: TargetGroup
+
+
+  # ============================================================
+  # CloudWatch Logs
+  # ============================================================
+
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+
+    Properties:
+
+      LogGroupName: /ecs/ecs-ec2-demo
+
+      RetentionInDays: 7
+
+
+  # ============================================================
+  # ECS Task Definition
+  # ============================================================
+
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+
+    Properties:
+
+      Family: ecs-ec2-demo
+
+      NetworkMode: bridge
+
+      RequiresCompatibilities:
+
+        - EC2
+
+      Cpu: '256'
+
+      Memory: '512'
+
+      ExecutionRoleArn:
+        Fn::GetAtt:
+          - ECSTaskExecutionRole
+          - Arn
+
+      ContainerDefinitions:
+
+        - Name: ecs-demo
+
+          Image:
+            !Sub
+              - '${RepositoryUri}:${ImageTag}'
+              - RepositoryUri:
+                  Fn::Sub:
+                    - '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ECRRepositoryName}'
+                    - ECRRepositoryName: !Ref ECRRepositoryName
+
+          Essential: true
+
+          Memory: 512
+
+          PortMappings:
+
+            - ContainerPort: 8080
+              HostPort: 0
+              Protocol: tcp
+
+          Environment:
+
+            - Name: ENVIRONMENT
+              Value: ec2
+
+          LogConfiguration:
+
+            LogDriver: awslogs
+
+            Options:
+
+              awslogs-group:
+                Ref: LogGroup
+
+              awslogs-region:
+                Ref: AWS::Region
+
+              awslogs-stream-prefix: ecs
+
+
+  # ============================================================
+  # ECS Service
+  # ============================================================
+
+  ECSService:
+    Type: AWS::ECS::Service
+
+    DependsOn:
+
+      - ALBListener
+
+    Properties:
+
+      ServiceName: ecs-ec2-demo
+
+      Cluster:
+        Ref: ECSCluster
+
+      TaskDefinition:
+        Ref: TaskDefinition
+
+      DesiredCount:
+        Ref: DesiredCount
+
+      LaunchType: EC2
+
+      DeploymentConfiguration:
+
+        MaximumPercent: 200
+
+        MinimumHealthyPercent: 50
+
+      LoadBalancers:
+
+        - ContainerName: ecs-demo
+
+          ContainerPort: 8080
+
+          TargetGroupArn:
+            Ref: TargetGroup
+
+
+# ==============================================================
+# Outputs
+# ==============================================================
+
+Outputs:
+
+  ClusterName:
+
+    Description: ECS cluster name
+
+    Value:
+      Ref: ECSCluster
+
+
+  ServiceName:
+
+    Description: ECS service name
+
+    Value:
+      Fn::GetAtt:
+        - ECSService
+        - Name
+
+
+  AutoScalingGroupName:
+
+    Description: EC2 Auto Scaling Group
+
+    Value:
+      Ref: AutoScalingGroup
+
+
+  LoadBalancerDNS:
+
+    Description: Application Load Balancer DNS name
+
+    Value:
+      Fn::GetAtt:
+        - ApplicationLoadBalancer
+        - DNSName
+
+
+  ApplicationURL:
+
+    Description: URL of the application
+
+    Value:
+      !Sub
+        - 'http://${DNSName}'
+        - DNSName:
+            Fn::GetAtt:
+              - ApplicationLoadBalancer
+              - DNSName
